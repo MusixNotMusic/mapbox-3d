@@ -1,19 +1,35 @@
 import * as THREE from 'three';
 import mapboxgl from 'mapbox-gl';
-import { vectorDegree } from '@/3d/lib/math';
 import { TwoPointDistance } from '@/3d/lib/mathMapbox';
+import { 
+  computeIntersectionSegmentCirclePolar
+} from '@/3d/lib/mathMapbox';
+
+import { 
+  imageShow,
+  calcSpaceInterData
+} from '@/3d/lib/interpolation';
+
+import { throttle } from 'lodash';
 
 export class DragObjects {
-    constructor(objects, callback, layer, map, halfWidth, halfHeight) {
+    constructor(objects, callback, layer, map, halfWidth, halfHeight, centerLngLat, radarNf) {
         this.layer = layer;
         this.map = map;
         this.canvas = map.getCanvasContainer();
         this.objects = objects;
-        this.callback = callback;
+        this.callback = callback.bind(this);
         this.raycaster = new THREE.Raycaster();
         this.targetObject = null;
 
-        this.coordQueue = [];
+        this.halfHeight = halfHeight;
+        this.halfWidth = halfWidth;
+        this.centerLngLat = centerLngLat;
+        // 提扫源数据
+        this.radarNf = radarNf;
+
+        this.coordXQueue = [];
+        this.coordYQueue = [];
         this.addListenerEvent();
     }
 
@@ -61,8 +77,13 @@ export class DragObjects {
     mouseMove() {
       this.map.on('mousemove', (event) => {
         if (this.targetObject) {
-          this.insertCoordQueue([event.lngLat.lng, event.lngLat.lat]);
-          this.targetObject.position.y += this.vectorDistance();
+           if (this.targetObject.name === 'moveNs') {
+              this.insertCoordYQueue([event.lngLat.lng, event.lngLat.lat]);
+              dragMoveNsCallback.bind(this)();
+           } else if (this.targetObject.name === 'moveWe') {
+              this.insertCoordXQueue([event.lngLat.lng, event.lngLat.lat]);
+              dragMoveWECallback.bind(this)();
+           }
         }
       })
     }
@@ -88,21 +109,40 @@ export class DragObjects {
         })
     }
 
-    insertCoordQueue (coord) {
-      if (this.coordQueue.length < 2) {
-        this.coordQueue.push(coord);
-      } else if (this.coordQueue.length === 2) {
-        this.coordQueue.shift();
-        this.coordQueue.push(coord);
+    insertCoordYQueue (coord) {
+      if (this.coordYQueue.length < 2) {
+        this.coordYQueue.push(coord);
+      } else if (this.coordYQueue.length === 2) {
+        this.coordYQueue.shift();
+        this.coordYQueue.push(coord);
+      }
+    }
+
+    insertCoordXQueue (coord) {
+      if (this.coordXQueue.length < 2) {
+        this.coordXQueue.push(coord);
+      } else if (this.coordXQueue.length === 2) {
+        this.coordXQueue.shift();
+        this.coordXQueue.push(coord);
       }
     }
 
     // test
-    vectorDistance () {
-      if (this.coordQueue.length === 2) {
-        let dir = (this.coordQueue[0][1] - this.coordQueue[1][1]) > 0 ? 1 : -1;
-        let avg_lng = (this.coordQueue[0][0] + this.coordQueue[0][1]) / 2;
-        return dir * TwoPointDistance([avg_lng, this.coordQueue[0][1]], [avg_lng, this.coordQueue[1][1]]);
+    vectorYDistance () {
+      if (this.coordYQueue.length === 2) {
+        let dir = (this.coordYQueue[0][1] - this.coordYQueue[1][1]) > 0 ? 1 : -1;
+        let avg_lng = (this.coordYQueue[0][0] + this.coordYQueue[0][1]) / 2;
+        return dir * TwoPointDistance([avg_lng, this.coordYQueue[0][1]], [avg_lng, this.coordYQueue[1][1]]);
+      } else {
+        return 0;
+      }
+    }
+  // test
+    vectorXDistance () {
+      if (this.coordXQueue.length === 2) {
+        let dir = (this.coordXQueue[1][0] - this.coordXQueue[0][0]) > 0 ? 1 : -1;
+        let avg_lng = (this.coordXQueue[0][1] + this.coordXQueue[1][1]) / 2;
+        return dir * TwoPointDistance([this.coordXQueue[0][0], avg_lng], [this.coordXQueue[1][0], avg_lng]);
       } else {
         return 0;
       }
@@ -131,50 +171,95 @@ function relativeCoordsToLngLat (centerLngLat, relativeX, relativeY) {
   return [lnglat.lng, lnglat.lat];
 }
 
-let scale = 500;
-
-export function dragMoveCallback (cartesianStart, cartesianEnd, context) {
-    cartesianStart.x = 0;
-    cartesianEnd.x = 0;
-    const radius = (700 * scale) / 2;
-    context.getSpaceDistance(cartesianStart, cartesianEnd).then((dis) => {
-        dis = context.cartesianEnd.y > context.cartesianStart.y ? dis : -dis;
+/**
+ * 
+ * @param {*} center  中心坐标
+ * @param {*} R  半径
+ * @param {*} coordA  A 坐标
+ * @param {*} coordB  B 坐标
+ * @param {*} data  提扫数据
+ */
+function computeSection (center, R, coordA, coordB, data, object) {
+  // origin data
+  let GateSizeOfReflectivity = data.Header.GateSizeOfReflectivity; // 库距离
+  let GateSize = data.Header.Gates[data.Header.BandNo];
+  let Position = data.Header.Position;
+  let Elevations = data.Header.Elevations;
+  // calc data
+  // let R = GateSizeOfReflectivity * GateSize;
+  // let center = [Position[0], Position[1]];
   
-        if (context.targetObject.position.y >= -radius && context.targetObject.position.y <= radius) {
-          context.targetObject.position.y = context.targetObject.position.y + dis;
-        }
-  
-        if (context.targetObject.position.y < -radius) {
-          context.targetObject.position.y = -radius;
-        } else if (context.targetObject.position.y > radius) {
-          context.targetObject.position.y = radius;
-        }
-  
-        let y = context.targetObject.position.y;
-        let degree1 = vectorDegree([0,0], [Math.sqrt(radius ** 2 - y ** 2), y])
-        let degree2 = 180 - degree1;
-        degree2 = degree2 > 0 ? degree2 : (360 + degree2);
-        // obj
-    })
+  let density = 1/2;
+  let polar = computeIntersectionSegmentCirclePolar( center, R, coordA, coordB, GateSizeOfReflectivity, density, Elevations, data);
+  if (polar && polar.length > 0) {
+      const canvas = drawSpaceImage(polar, Elevations);
+      let texture = new THREE.CanvasTexture( canvas );
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      object.material.map = texture;
+      object.material.needsUpdate = true;
   }
+}
+const _computeSection = throttle(computeSection, 100);
 
-export function dragMoveWECallback (cartesianStart, cartesianEnd, context) {
-  cartesianStart.y = 0;
-  cartesianEnd.y = 0;
-  const radius = (700 * scale) / 2;
-  context.getSpaceDistance(cartesianStart, cartesianEnd).then((dis) => {
-      dis = context.cartesianEnd.x > context.cartesianStart.x ? dis : -dis;
-      if (context.targetObject.position.x >= -radius && context.targetObject.position.x <= radius) {
-        context.targetObject.position.x = context.targetObject.position.x + dis;
-      } 
-      if (context.targetObject.position.x < -radius) {
-        context.targetObject.position.x = -radius;
-      } else if (context.targetObject.position.x > radius) {
-        context.targetObject.position.x = radius;
-      }
+/**
+     * 空间距离定位，增加高度
+     * @param {*} layers 
+     */
+function drawSpaceImage (layers, evelations) {
+    let results = calcSpaceInterData(layers, evelations, true);
+    let canvas = document.querySelector('.myCanvas');
+    const mapColorsFunc = (val) => { return MeteoInstance.colorArray[val | 0]}
+    canvas = imageShow(results.reverse(), canvas, 1, mapColorsFunc);
+    let canvasWidth = canvas.clientWidth;
+    let canvasHeight = canvas.clientHeight;
+    canvas.setAttribute('class', 'myCanvas');
+    canvas.setAttribute('style', `width: ${canvasWidth}; height: ${canvasHeight}; margin-left: calc(50% - ${canvasWidth / 2}px)`);
+    return canvas;
+}
 
-      let x = context.targetObject.position.x;
-      let degree1 = vectorDegree([0,0], [x, Math.sqrt(radius ** 2 - x ** 2)])
-      let degree2 = 360 - degree1;
-  })
+export function dragMoveNsCallback () {
+    let distance = this.vectorYDistance();
+    let y = this.targetObject.position.y;
+    let radius = this.halfHeight;
+
+    if (y >= -radius && y <= radius) {
+      this.targetObject.position.y += distance;
+      // this.targetObject.position.y += distance > 0 ? radius / 30 : - radius / 30;
+    }
+
+    y = this.targetObject.position.y;
+    if (y < -radius) {
+      this.targetObject.position.y = -radius + 5;
+    } else if (y > radius) {
+      this.targetObject.position.y = radius - 5;
+    }
+    // left right lnglat
+    let leftPoint = relativeCoordsToLngLat(this.centerLngLat, this.halfHeight, this.targetObject.position.y);
+    let rightPoint = relativeCoordsToLngLat(this.centerLngLat, -this.halfHeight, this.targetObject.position.y);
+
+    _computeSection(this.centerLngLat, radius, leftPoint, rightPoint, this.radarNf, this.targetObject)
+
+}
+
+export function dragMoveWECallback () {
+    let distance = this.vectorXDistance();
+    let x = this.targetObject.position.x;
+    let radius = this.halfWidth;
+
+    if (x >= -radius && x <= radius) {
+      this.targetObject.position.x -= distance;
+    }
+
+    x = this.targetObject.position.x;
+    if (x < -radius) {
+      this.targetObject.position.x = -radius + 5;
+    } else if (x > radius) {
+      this.targetObject.position.x = radius - 5;
+    }
+
+    let upPoint = relativeCoordsToLngLat(this.centerLngLat, -this.targetObject.position.x, -radius);
+    let downPoint = relativeCoordsToLngLat(this.centerLngLat, -this.targetObject.position.x, radius);
+
+    _computeSection(this.centerLngLat, radius, upPoint, downPoint, this.radarNf, this.targetObject)
+
 }

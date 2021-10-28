@@ -90,7 +90,13 @@ export const bilinearInterpolator = func => (x, y) => {
  * @param {*} colorFunc  颜色比例尺
  * @returns 
  */
-export function imageShow(data, canvas, pixelSize, colorFunc) {
+export function imageShow(data, canvas, pixelSize, colorFunc, defaultColor = 'black') {
+    // lean panel
+    if (data.length === 0) {
+        // const context = canvas.getContext("2d");
+        clearImageData(canvas, defaultColor);
+        return canvas;
+    }
     // Flatten 2D input array
     const flat = [].concat.apply([], data);
     // Color Scale & Min-Max normalization
@@ -120,6 +126,22 @@ export function imageShow(data, canvas, pixelSize, colorFunc) {
     });
     context.putImageData(imageData, 0, 0);
   
+    return canvas;
+}
+
+export function clearImageData (canvas, color) {
+    const context = canvas.getContext("2d");
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const imageData = context.createImageData(width, height);
+    const clr = d3.color(color);
+    for(let i = 0; i < width * height; i++) {
+      imageData.data[i*4  ] = clr.r;
+      imageData.data[i*4+1] = clr.b;
+      imageData.data[i*4+2] = clr.g;
+      imageData.data[i*4+3] = 255;
+    }
+    context.putImageData(imageData, 0, 0);
     return canvas;
 }
 

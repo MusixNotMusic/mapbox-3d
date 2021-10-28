@@ -21,8 +21,8 @@ export function drawMaxPlane(data) {
   const materialNS = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
   const materialWE = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
 
-  const materialMoveNS = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true, color: 'gray', opacity: 0.6 });
-  const materialMoveWE = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true, color: 'gray', opacity: 0.6 });
+  const materialMoveNS = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true, color: 'gray', opacity: 0.8 });
+  const materialMoveWE = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true, color: 'gray', opacity: 0.8 });
 
   materialTop.map = new THREE.CanvasTexture( canvTop );
   materialNS.map = new THREE.CanvasTexture( canvNS );
@@ -78,7 +78,7 @@ export function drawMaxPlane(data) {
     we: meshWE,
     moveNs: meshMoveNS,
     moveWe: meshMoveWE,
-    halfWidth: data.widthPixel / 2 * scale,
-    halfHeight: data.heightPixel / 2 * scale
+    halfWidth: data.widthPixel * scale / 2,
+    halfHeight: data.heightPixel * scale / 2
   };
 }

@@ -16,7 +16,7 @@ import * as turf from '@turf/turf';
 
  export function computeIntersectionSegmentCirclePolar (center, R, coordA, coordB, GateSizeOfReflectivity, density, Elevations, radarNf) {
     let InterPoints = interTwoPoints(coordA, coordB, GateSizeOfReflectivity, R, density);
-    console.log('linear  lerp ==》', coordA, coordB, InterPoints);
+    // console.log('linear  lerp ==》', coordA, coordB, InterPoints);
     let Gates = R / GateSizeOfReflectivity + 1;
     let polars = []
     let base = []
@@ -26,26 +26,23 @@ import * as turf from '@turf/turf';
           let dis = TwoPointDistance(center, point);
           base.push({ azIndex: degree, binIndex: dis / GateSizeOfReflectivity, dis: dis })
       })
-        console.log('base ==>', base)
-        console.log('距离库 ==>', base[0].binIndex, base[base.length - 1].binIndex)
-        console.log('距离 ==>', base[0].dis, base[base.length - 1].dis)
        
-        let len = Elevations.length;
-        let m = 0;
-        for(let i = len - 1; i >= 0; i--, m++) {
-            let ele = Elevations[i] / 180 * Math.PI;
-            polars[m] = base.map(polarPoint => {
-                let azIndex = polarPoint.azIndex;
-                let binIndex = polarPoint.binIndex / Math.cos(ele);
-                let val = binIndex > Gates ? 0 : radarNf.getOriginVal(i, azIndex | 0,  binIndex | 0).val;
-                return { 
-                  azIndex,
-                  binIndex,
-                  val: val || 0
-                }
-            })
-        }
-        return polars;
+      let len = Elevations.length;
+      let m = 0;
+      for(let i = len - 1; i >= 0; i--, m++) {
+          let ele = Elevations[i] / 180 * Math.PI;
+          polars[m] = base.map(polarPoint => {
+              let azIndex = polarPoint.azIndex;
+              let binIndex = polarPoint.binIndex / Math.cos(ele);
+              let val = binIndex > Gates ? 0 : radarNf.getOriginVal(i, azIndex | 0,  binIndex | 0).val;
+              return { 
+                azIndex,
+                binIndex,
+                val: val || 0
+              }
+          })
+      }
+      return polars;
     } 
     return [];
 }

@@ -36,7 +36,7 @@ import Map3dLayar from '@/map/layer';
 
 import { gltfLoader } from '@/3d/three/GLTFLoader';
 
-import { DragObjects, dragMoveCallback, dragMoveWECallback } from '@/3d/lib/model/event/drag';
+import { DragObjects, dragMoveNsCallback, dragMoveWECallback } from '@/3d/lib/model/event/drag';
 
 export default {
   components: { ClrView },
@@ -123,48 +123,61 @@ export default {
         } else if( index === 4) {
             const colorPrcess = new ColorProcess();
             colorPrcess.initPromise(this.fileName, this.baseURL).then((data) => {
+
                 MeteoInstance.colorCard = data.colorArray.map(hexString => {
                     return window.parseInt(`0x${hexString.slice(1)}`);
                 });
                 MeteoInstance.colorArray = data.colorArray;
                 loadMax().then((data) => {
-                  console.log('loadMax ==>', data)
-                  let { top, ns, we, moveNs, moveWe, halfWidth, halfHeight } = drawMaxPlane(data, this.$map3D.map);
-                  window.moveNs = moveNs;
-                  window.moveWe = moveWe;
-                  let layer = new Map3dLayar({
-                        id: indexMapName[index],
-                        map: this.$map3D.map,
-                        renderGraph: [top, ns, we],
-                        modelOrigin: [data.Headers.centerLon, data.Headers.centerLat],
-                        modelRotate: [0, 0, Math.PI],
-                        modelAltitude: 0
-                  });
-                  this.$map3D.map.addLayer(layer.buildLayer());
+                  // 提扫数据   
+                  loadPng().then((radarNf) => {
+                        let { top, ns, we, moveNs, moveWe, halfWidth, halfHeight } = drawMaxPlane(data, this.$map3D.map);
+                        console.log('loadMax ==>', data, halfWidth, halfHeight)
+                        window.moveNs = moveNs;
+                        window.moveWe = moveWe;
+                        let layer = new Map3dLayar({
+                                id: indexMapName[index],
+                                map: this.$map3D.map,
+                                renderGraph: [top, ns, we],
+                                modelOrigin: [data.Headers.centerLon, data.Headers.centerLat],
+                                modelRotate: [0, 0, Math.PI],
+                                modelAltitude: 0
+                        });
+                        this.$map3D.map.addLayer(layer.buildLayer());
 
-                  let layerMoveNs = new Map3dLayar({
-                        id: moveNs.name,
-                        map: this.$map3D.map,
-                        renderGraph: [moveNs, moveWe],
-                        modelOrigin: [data.Headers.centerLon, data.Headers.centerLat],
-                        modelRotate: [0, 0, Math.PI],
-                        modelAltitude: 0
-                  });
-                  this.$map3D.map.addLayer(layerMoveNs.buildLayer());
+                        let layerMoveNs = new Map3dLayar({
+                                id: moveNs.name,
+                                map: this.$map3D.map,
+                                renderGraph: [moveNs, moveWe],
+                                modelOrigin: [data.Headers.centerLon, data.Headers.centerLat],
+                                modelRotate: [0, 0, Math.PI],
+                                modelAltitude: 0
+                        });
+                        this.$map3D.map.addLayer(layerMoveNs.buildLayer());
 
-                //   let layerMoveWe = new Map3dLayar({
-                //         id: moveWe.name,
-                //         map: this.$map3D.map,
-                //         renderGraph: moveWe,
-                //         modelOrigin: [data.Headers.centerLon, data.Headers.centerLat],
-                //         modelRotate: [0, 0, Math.PI],
-                //         modelAltitude: 0
-                //   });
-                //   this.$map3D.map.addLayer(layerMoveWe.buildLayer());
+                        //   let layerMoveWe = new Map3dLayar({
+                        //         id: moveWe.name,
+                        //         map: this.$map3D.map,
+                        //         renderGraph: moveWe,
+                        //         modelOrigin: [data.Headers.centerLon, data.Headers.centerLat],
+                        //         modelRotate: [0, 0, Math.PI],
+                        //         modelAltitude: 0
+                        //   });
+                        //   this.$map3D.map.addLayer(layerMoveWe.buildLayer());
 
-                //   new DragObjects(moveNs, dragMoveCallback, layerMoveNs, this.$map3D.map);
-                //   new DragObjects(moveWe, dragMoveWECallback, layerMoveNs, this.$map3D.map);
-                    new DragObjects([moveNs, moveWe], dragMoveWECallback, layerMoveNs, this.$map3D.map, halfWidth, halfHeight);
+                        //   new DragObjects(moveNs, dragMoveNsCallback, layerMoveNs, this.$map3D.map, halfWidth, halfHeight);
+                        //   new DragObjects(moveWe, dragMoveWECallback, layerMoveNs, this.$map3D.map, halfWidth, halfHeight);
+                        let maxDrag = new DragObjects(
+                            [moveNs, moveWe], 
+                            dragMoveWECallback, 
+                            layerMoveNs, 
+                            this.$map3D.map, 
+                            halfWidth, 
+                            halfWidth, 
+                            [data.Headers.centerLon, data.Headers.centerLat],
+                            radarNf
+                        );
+                    })
                 });
             })
         } else if( index === 5) {
